@@ -15,3 +15,4 @@ Built in GO with lots of help from the following resources:
 1) http://www.computerarcheology.com/Arcade/SpaceInvaders/Code.html
 2) http://www.emulator101.com/reference/8080-by-opcode.html
 3) http://www.pastraiser.com/cpu/i8080/i8080_opcodes.html
+4) https://github.com/begoon/i8080-core/

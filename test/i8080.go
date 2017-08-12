@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 )
 
@@ -13,6 +14,14 @@ var DEBUGMODE = true
 // COMPAREFLAG - When set, the output of debugPrint() will match what is output
 // by the modified i8080-core program so that both logs can be diff'd
 var COMPAREFLAG = false
+
+// CLIENTMODE - When set, the emulator will connect to a local server and output debug
+// data to that server so that it may be compared to the output of another emulator
+var CLIENTMODE = false
+
+var connection net.Conn
+var outputBuffer = ""
+var readyToWriteFlag = false
 
 type microcontroller struct {
 	rb, rc, rd, re, rh, rl, ra uint8 // Seven working registers
@@ -61,24 +70,31 @@ func debugPrintHeader(mc *microcontroller) {
 }
 
 func debugPrint(mc *microcontroller, name string, values uint16) {
-	if DEBUGMODE {
-		if !COMPAREFLAG { // Do not print headers in compare output mode
+	if DEBUGMODE || CLIENTMODE {
+		if !COMPAREFLAG && !CLIENTMODE { // Do not print headers in compare output mode or in client mode
 			debugPrintHeader(mc)
 		}
 		// Prints out the opcode and the immediate data (if any) based on values
 		// passed to this function
-		if !COMPAREFLAG {
-			fmt.Printf("%04X : %02X", mc.programCounter, (*mc.memory)[mc.programCounter])
+		output := ""
+		if COMPAREFLAG || CLIENTMODE { // In compare output mode, print an easily computer parseable string
+			output += fmt.Sprintf("%04X %02X ", mc.programCounter, (*mc.memory)[mc.programCounter])
+		} else {
+			output += fmt.Sprintf("%04X : %02X", mc.programCounter, (*mc.memory)[mc.programCounter])
 			for i := uint16(1); i < values+1; i++ {
-				fmt.Printf(" %02X", (*mc.memory)[mc.programCounter+i])
+				output += fmt.Sprintf(" %02X", (*mc.memory)[mc.programCounter+i])
 			}
-			fmt.Printf("\t\t %-15s", name)
-		} else { // In compare output mode, print an easily computer parseable string
-			fmt.Printf("%04X %02X ", mc.programCounter, (*mc.memory)[mc.programCounter])
+			output += fmt.Sprintf("\t\t %-15s", name)
 		}
 		//   rb  rc   rd   re   rh   rl   ra   psw
-		fmt.Printf("%02X %02X %02X %02X %02X %02X %02X %08b %04X\n",
+		output += fmt.Sprintf("%02X %02X %02X %02X %02X %02X %02X %08b %04X\n",
 			mc.rb, mc.rc, mc.rd, mc.re, mc.rh, mc.rl, mc.ra, pswByte(mc), mc.stackPointer)
+
+		if CLIENTMODE {
+			outputBuffer += output
+		} else {
+			fmt.Print(output)
+		}
 	}
 }
 
@@ -541,6 +557,7 @@ func (mc *microcontroller) dcx() {
 }
 
 func (mc *microcontroller) di() {
+	debugPrint(mc, "DI", 0)
 	// Disable interrupt
 	mc.inte = false
 	mc.programCounter++
@@ -549,6 +566,8 @@ func (mc *microcontroller) di() {
 func (mc *microcontroller) dcr() {
 	// Decrement register
 	letterMap := string("BCDEHLMA")
+
+	oldCarry := mc.carry // For some reason carry is not affected by DCR
 	cmd := ((*mc.memory)[mc.programCounter] >> 3) & 0x07
 	debugPrint(mc, fmt.Sprintf("DCR %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory location held in HL
@@ -557,6 +576,8 @@ func (mc *microcontroller) dcr() {
 	} else { // Just decrement the register
 		*mc.rarray[cmd] = Sub(*mc.rarray[cmd], 1, mc)
 	}
+	mc.carry = oldCarry
+
 	mc.programCounter++
 }
 
@@ -569,6 +590,7 @@ func (mc *microcontroller) ei() {
 func (mc *microcontroller) inr() {
 	// Increment register
 	letterMap := string("BCDEHLMA")
+	oldCarry := mc.carry // For some reason INR doesn't affect carry
 	cmd := ((*mc.memory)[mc.programCounter] >> 3) & 0x07
 	debugPrint(mc, fmt.Sprintf("INR %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory location held in HL
@@ -577,6 +599,7 @@ func (mc *microcontroller) inr() {
 	} else { // Just increment the register
 		*mc.rarray[cmd] = Add(*mc.rarray[cmd], 1, mc)
 	}
+	mc.carry = oldCarry
 	mc.programCounter++
 }
 
@@ -1092,6 +1115,25 @@ func (mc *microcontroller) xthl() {
 	mc.programCounter++
 }
 
+func writeOutput() {
+	if !CLIENTMODE {
+		return
+	}
+	if len(outputBuffer) > 43*100 { // 43 characters per line is the standard output (this includes \n)
+		//fmt.Printf("Writing %d", len(outputBuffer))
+		n, err := connection.Write([]byte(outputBuffer))
+		if n != len(outputBuffer) {
+			fmt.Println("Could not write the entire buffer")
+			panic("Buffer not written")
+		}
+		if err != nil {
+			fmt.Printf("Error writing to buffer: %s", err)
+		}
+		outputBuffer = ""
+		readyToWriteFlag = false
+	}
+}
+
 func (mc *microcontroller) run() {
 	instruction := (*mc.memory)[mc.programCounter]
 	switch {
@@ -1327,17 +1369,48 @@ func conout(mc *microcontroller) {
 	}
 }
 
+func connect(fileName string) {
+	conn, err := net.Dial("tcp", "localhost:5679")
+	if err != nil {
+		fmt.Printf("Could not connect to the local debug server at localhost:5679")
+	}
+	identifyString := fmt.Sprintf("IDENTIFY 8080-golang %s\n", fileName)
+	conn.Write([]byte(identifyString))
+	connection = conn
+}
+
+func readyToWrite() bool {
+	//fmt.Printf("waiting for a write flag..")
+	if !CLIENTMODE || readyToWriteFlag {
+		return true
+	}
+
+	buffer := make([]byte, 1024)
+	n, err := connection.Read(buffer)
+	if err != nil {
+		fmt.Printf("Error while reading from server: %s", err)
+		panic("Error while reading from server")
+	}
+	//fmt.Printf("Got data from server: %s", string(buffer))
+	if n > 0 && buffer[0] == byte('W') { // "W" flag from server means that it's ok to go ahead and write
+		readyToWriteFlag = true
+	}
+	return readyToWriteFlag
+}
+
 func main() {
 	emulation := newMicrocontroller()
 	args := os.Args[1:]
 
 	// Parse command line flags
-	verboseFlag := flag.Bool("v", true, "Show every instruction being executed (slow)")                      // Verbose mode
-	compareFlag := flag.Bool("c", false, "Instructions are output in the format of the i8080-core emulator") // Verbose mode
+	verboseFlag := flag.Bool("v", true, "Show every instruction being executed (slow)")
+	compareFlag := flag.Bool("c", false, "Instructions are output in the format of the i8080-core emulator")
+	serverFlag := flag.Bool("s", false, "Connect to a local server and write debug data to it")
 	flag.Parse()
 
 	COMPAREFLAG = *compareFlag
 	DEBUGMODE = *verboseFlag
+	CLIENTMODE = *serverFlag
 
 	if len(args) == 0 {
 		fmt.Printf("%s <program> - Runs the test program <program>", os.Args[0])
@@ -1345,6 +1418,10 @@ func main() {
 	}
 
 	romName := args[len(args)-1]
+
+	if CLIENTMODE {
+		connect(romName)
+	}
 	rom := loadTestROM(romName)
 	emulation.programCounter = 0x100 // Hardcoded because the test ROMs start at 0x100
 	emulation.memory = &rom
@@ -1353,7 +1430,11 @@ func main() {
 
 	for {
 		startAddress := emulation.programCounter
+
+		readyToWrite()
 		emulation.run()
+		writeOutput()
+
 		if emulation.programCounter == 0 {
 			fmt.Printf("OUTPUT: Jump to 0x0 from %04X\n", startAddress)
 			if DEBUGMODE {

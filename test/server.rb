@@ -1,6 +1,6 @@
 require 'eventmachine'
 
-LINES_TO_COMPARE = 100
+LINES_TO_COMPARE = 1024*100
 
 class Server
 	attr_accessor :connections
@@ -22,8 +22,8 @@ class Server
 	end
 	
 	def dump_output()
-		 #Sample: 0318 C2 13 34 0C 0A 00 ED 6A 00010010 0500
-		header = "ADDR OP B  C  D  E  H  L  A  SZ-X-P-C  SP "
+		 #Sample: 0318 C2 00 00 13 34 0C 0A 00 ED 6A 00010010 0500
+		header = "ADDR OP DA TA B  C  D  E  H  L  A  SZ-X-P-C  SP "
 		client_names = @connections.collect { |con| con.client_name.center(header.length) }
 		puts client_names.join(" | ")
 		puts ([header]*@connections.length).join(" | ") # Put a delimeter between the headers
@@ -49,11 +49,10 @@ class Server
 					raise RuntimeError, "Discrepancy found during comparison"
 				end
 			end
-			
 			connections.each do |con|
 				con.waiting = false
 				con.send_data("W")
-				con.lines = []
+				con.lines = con.lines[LINES_TO_COMPARE..-1]
 			end
 		end
 	end
@@ -77,11 +76,13 @@ module CompareClient
 		@buffer += data
 		lines = @buffer.split("\n")
 		if @buffer[-1] != "\n" then
-			@buffer = lines[-1]
+			@buffer = lines.pop() # Remove the last element of the array
+			                      # because it's a partial message
 		else
 			@buffer = ""
 		end
 		lines.each do |line|
+			#puts "#{@client_name} #{line}"
 			elements = line.split(" ")
 			if elements[0] == "IDENTIFY" then
 				@client_name = elements[1..-1].join(" ")

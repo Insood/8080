@@ -1,14 +1,9 @@
 package main
 
 /*
-var zero bool     // 1 if the result is 0x0, 0 if otherwise
-var carry bool    // 1 if carry out of byte, 0 if no carry
-var auxCarry bool // 1 if carry out of the LS nibble
-var sign bool     // 1 if the MSB is 1
-var parity bool   // the number of 1-bits in the resulting byte; if even then 1, 0 if odd
-*/
-/*
-Index: (((A & 0x88) >> 1) | ((VAL & 0x88) >> 2) | ((A+VAL) & 0x88) >> 3)) & 0x7
+Index: (((A & 0x88) >> 1) | ((VAL & 0x88) >> 2) | ((RESULT) & 0x88) >> 3)) & 0x7
+Depending on the operation, RESULT may be either A+VAL or A+VAL+C
+This is based on the implementation of i8080-core
 
  A|VAL|RES|INDEX|  Meaning
 :--|:--|:--|:--|:--
@@ -35,12 +30,18 @@ Index: (((A & 0x88) >> 1) | ((VAL & 0x88) >> 2) | ((A+VAL) & 0x88) >> 3)) & 0x7
  1  | 1 |  1 | 0 |  a < 0 ; val >= -8 but the result is above -8  (ie: -1 - 7) => 1111 + 1001 = 1 0110 (+6)
 */
 
+var addHalfCarryTable = []bool{false, false, true, false, true, false, true, true}
 var subHalfCarryTable = []bool{true, false, false, false, true, true, true, false}
 
-// Sub : a-b implemented using a + ^b+1 and sets microcontroller flags
-func Sub(a uint8, b uint8, mc *microcontroller) uint8 {
-	result8 := Add(a, ^b+1, mc)
-	mc.carry = a < b // Set carry true only if there was a 'borrow'
+// SUB : Subtracts B from A and then sets micro controller flags
+// the borrow argument is used by SBB, everything else should call it with a value of 0
+func Sub(a uint8, b uint8, mc *microcontroller, borrow uint8) uint8 {
+	result16 := uint16(a) - uint16(b) - uint16(borrow)
+	result8 := uint8(result16)
+	mc.zero = result8 == 0x0
+	mc.sign = (result8 >> 7) == 0x1
+	mc.parity = GetParity(result8)
+	mc.carry = result16&0x100 > 0
 
 	index := (((a & 0x88) >> 1) | ((b & 0x88) >> 2) | ((result8 & 0x88) >> 3)) & 0x7
 	mc.auxCarry = subHalfCarryTable[index]
@@ -56,15 +57,20 @@ func GetParity(value uint8) bool {
 	return returnValue
 }
 
-// Add : Adds two 1-byte values together and sets microcontrolle flags
-func Add(a uint8, b uint8, mc *microcontroller) uint8 {
+// Add : Adds two 1-byte values together and sets microcontroller flags
+//       the carry flag is used by the ADC instructions
+func Add(a uint8, b uint8, mc *microcontroller, carry uint8) uint8 {
 	// Do bitwise addition
-	result16 := uint16(a) + uint16(b)
+	result16 := uint16(a) + uint16(b) + uint16(carry)
 	result8 := uint8(result16)
 
 	mc.zero = result8 == 0x0
 	mc.carry = result16&0x100 != 0x0 // The Carry bit is set when the result is positive (overflow)
-	mc.auxCarry = ((a&0xF)+(b&0xF))&0x10 == 0x10
+	// the i8080-core emulator uses the halfcarry table because apparently the implementation of
+	// the KR580VM80A is such that the half carry flag is calculated not based on A+VAL+C
+	// but based on the 'magic' that happens in this half carry table
+	index := (((a & 0x88) >> 1) | ((b & 0x88) >> 2) | ((result8 & 0x88) >> 3)) & 0x7
+	mc.auxCarry = addHalfCarryTable[index]
 	mc.sign = (result8 >> 7) == 0x1
 	mc.parity = GetParity(result8)
 	return result8

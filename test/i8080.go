@@ -22,6 +22,8 @@ var CLIENTMODE = false
 var connection net.Conn
 var outputBuffer = ""
 var readyToWriteFlag = false
+var LINES_TO_WRITE = 1024 * 100
+var BYTES_PER_LINE = 49
 
 type microcontroller struct {
 	rb, rc, rd, re, rh, rl, ra uint8 // Seven working registers
@@ -78,7 +80,11 @@ func debugPrint(mc *microcontroller, name string, values uint16) {
 		// passed to this function
 		output := ""
 		if COMPAREFLAG || CLIENTMODE { // In compare output mode, print an easily computer parseable string
-			output += fmt.Sprintf("%04X %02X ", mc.programCounter, (*mc.memory)[mc.programCounter])
+			// PC, OPCODE, 2BYTES that follow the opcode
+			output += fmt.Sprintf("%04X %02X %02X %02X ", mc.programCounter,
+				(*mc.memory)[mc.programCounter],
+				(*mc.memory)[mc.programCounter+1],
+				(*mc.memory)[mc.programCounter+2])
 		} else {
 			output += fmt.Sprintf("%04X : %02X", mc.programCounter, (*mc.memory)[mc.programCounter])
 			for i := uint16(1); i < values+1; i++ {
@@ -130,7 +136,7 @@ func (mc *microcontroller) aci() {
 	if mc.carry {
 		carry = 1
 	}
-	mc.ra = Add(mc.ra, data+carry, mc)
+	mc.ra = Add(mc.ra, data+carry, mc, 0)
 	mc.programCounter += 2
 }
 
@@ -144,10 +150,13 @@ func (mc *microcontroller) adc() {
 		carry = 1
 	}
 	if cmd == 6 { // Memory reference
-		mc.ra = Add(mc.ra, (*mc.memory)[mc.memoryReference()]+carry, mc)
+		mc.ra = Add(mc.ra, (*mc.memory)[mc.memoryReference()], mc, carry)
 	} else {
-		mc.ra = Add(mc.ra, *mc.rarray[cmd]+carry, mc)
+		mc.ra = Add(mc.ra, *mc.rarray[cmd], mc, carry)
 	}
+	// for some reason the i8080-core calculates the half-carry
+	// flag only as the result of the A+VAL, not as part of A+VAL+C
+
 	mc.programCounter++
 }
 
@@ -156,17 +165,18 @@ func (mc *microcontroller) add() {
 	cmd := (*mc.memory)[mc.programCounter] & 0x07
 	debugPrint(mc, fmt.Sprintf("ADD %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory reference
-		mc.ra = Add(mc.ra, (*mc.memory)[mc.memoryReference()], mc)
+		mc.ra = Add(mc.ra, (*mc.memory)[mc.memoryReference()], mc, 0)
 	} else {
-		mc.ra = Add(mc.ra, *mc.rarray[cmd], mc)
+		mc.ra = Add(mc.ra, *mc.rarray[cmd], mc, 0)
 	}
 	mc.programCounter++
 }
 
 func (mc *microcontroller) adi() {
+	// ADD immediate to A
 	debugPrint(mc, "ADI", 1)
 	data := (*mc.memory)[mc.programCounter+1]
-	mc.ra = Add(mc.ra, data, mc)
+	mc.ra = Add(mc.ra, data, mc, 0)
 	mc.programCounter += 2
 }
 
@@ -182,7 +192,9 @@ func (mc *microcontroller) ana() {
 		data = *mc.rarray[cmd]
 	}
 	//mc.auxCarry is not affected per the 8080 programmer's manual
-	//but some tests rely on this value to be calculated as follows
+	// But the 8080/8085 manual states that below is the correct behavior
+	// http://bitsavers.trailing-edge.com/pdf/intel/MCS80/9800301D_8080_8085_Assembly_Language_Programming_Manual_May81.pdf
+	// pg 1-12
 	mc.auxCarry = ((mc.ra | data) & 0x08) != 0
 	mc.ra &= data
 	mc.carry = false // Per spec, carry bit is always reset
@@ -371,7 +383,7 @@ func (mc *microcontroller) cm() {
 func (mc *microcontroller) cma() {
 	// Complement Accumulator (A = ~A)
 	debugPrint(mc, "CMA", 0)
-	mc.ra = ^mc.ra
+	mc.ra = mc.ra ^ 0xFF
 	mc.programCounter++
 }
 
@@ -390,9 +402,9 @@ func (mc *microcontroller) cmp() {
 
 	debugPrint(mc, fmt.Sprintf("CMP %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory reference
-		Sub(mc.ra, (*mc.memory)[mc.memoryReference()], mc)
+		Sub(mc.ra, (*mc.memory)[mc.memoryReference()], mc, 0)
 	} else {
-		Sub(mc.ra, *mc.rarray[cmd], mc)
+		Sub(mc.ra, *mc.rarray[cmd], mc, 0)
 	}
 	mc.programCounter++
 }
@@ -442,7 +454,7 @@ func (mc *microcontroller) cpi() {
 	// with the accumulator using subtraction (A - data) and sets some flags
 	debugPrint(mc, "CPI", 1)
 	data := (*mc.memory)[mc.programCounter+1]
-	Sub(mc.ra, data, mc)
+	Sub(mc.ra, data, mc, 0)
 	//fmt.Printf("Comparing %02X to %02X\n", mc.ra, data)
 	mc.programCounter += 2
 }
@@ -479,7 +491,7 @@ func (mc *microcontroller) daa() {
 	}
 	// Then, take the accumulator and check to see if the 4MSB
 	// Are more than 9. If they are, increment by six
-	if (((mc.ra+add)>>4)&0xF > 9) || mc.carry {
+	if (((mc.ra >> 4) >= 9) && (mc.ra&0xF > 9)) || carry || (mc.ra>>4) > 9 {
 		add += 0x60
 		// The specification says that if a carry occured out of the
 		// 4MSB, that the carry flag must be set otherwise it is unaffacted
@@ -490,7 +502,7 @@ func (mc *microcontroller) daa() {
 	if add > 0 {
 		// Have to call Add() just once because each Add()
 		// changes the internal flags
-		mc.ra = Add(mc.ra, add, mc)
+		mc.ra = Add(mc.ra, add, mc, 0)
 	}
 	mc.carry = carry // calculated carry value for this op
 
@@ -572,9 +584,9 @@ func (mc *microcontroller) dcr() {
 	debugPrint(mc, fmt.Sprintf("DCR %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory location held in HL
 		target := (uint16(mc.rh) << 8) | uint16(mc.rl)
-		(*mc.memory)[target] = Sub((*mc.memory)[target], 1, mc)
+		(*mc.memory)[target] = Sub((*mc.memory)[target], 1, mc, 0)
 	} else { // Just decrement the register
-		*mc.rarray[cmd] = Sub(*mc.rarray[cmd], 1, mc)
+		*mc.rarray[cmd] = Sub(*mc.rarray[cmd], 1, mc, 0)
 	}
 	mc.carry = oldCarry
 
@@ -582,6 +594,7 @@ func (mc *microcontroller) dcr() {
 }
 
 func (mc *microcontroller) ei() {
+	debugPrint(mc, "EI", 0)
 	// Enable Interrupt
 	mc.inte = true
 	mc.programCounter++
@@ -595,9 +608,9 @@ func (mc *microcontroller) inr() {
 	debugPrint(mc, fmt.Sprintf("INR %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory location held in HL
 		target := (uint16(mc.rh) << 8) | uint16(mc.rl)
-		(*mc.memory)[target] = Add((*mc.memory)[target], 1, mc)
+		(*mc.memory)[target] = Add((*mc.memory)[target], 1, mc, 0)
 	} else { // Just increment the register
-		*mc.rarray[cmd] = Add(*mc.rarray[cmd], 1, mc)
+		*mc.rarray[cmd] = Add(*mc.rarray[cmd], 1, mc, 0)
 	}
 	mc.carry = oldCarry
 	mc.programCounter++
@@ -963,7 +976,7 @@ func (mc *microcontroller) sbi() {
 	}
 
 	data := (*mc.memory)[mc.programCounter+1]
-	mc.ra = Sub(mc.ra, data+carry, mc)
+	mc.ra = Sub(mc.ra, data, mc, carry)
 	mc.programCounter += 2
 }
 
@@ -1027,9 +1040,9 @@ func (mc *microcontroller) sbb() {
 	}
 	debugPrint(mc, fmt.Sprintf("SBB %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory reference
-		mc.ra = Sub(mc.ra, (*mc.memory)[mc.memoryReference()]+carry, mc)
+		mc.ra = Sub(mc.ra, (*mc.memory)[mc.memoryReference()], mc, carry)
 	} else {
-		mc.ra = Sub(mc.ra, *mc.rarray[cmd]+carry, mc)
+		mc.ra = Sub(mc.ra, *mc.rarray[cmd], mc, carry)
 	}
 	mc.programCounter++
 }
@@ -1041,9 +1054,9 @@ func (mc *microcontroller) sub() {
 
 	debugPrint(mc, fmt.Sprintf("SUB %s", string(letterMap[cmd])), 0)
 	if cmd == 6 { // Memory reference
-		mc.ra = Sub(mc.ra, (*mc.memory)[mc.memoryReference()], mc)
+		mc.ra = Sub(mc.ra, (*mc.memory)[mc.memoryReference()], mc, 0)
 	} else {
-		mc.ra = Sub(mc.ra, *mc.rarray[cmd], mc)
+		mc.ra = Sub(mc.ra, *mc.rarray[cmd], mc, 0)
 	}
 	mc.programCounter++
 }
@@ -1051,7 +1064,7 @@ func (mc *microcontroller) sui() {
 	// Subtract immediate from accumuatlor
 	debugPrint(mc, "SUI", 1)
 	data := (*mc.memory)[mc.programCounter+1]
-	mc.ra = Sub(mc.ra, data, mc)
+	mc.ra = Sub(mc.ra, data, mc, 0)
 	mc.programCounter += 2
 }
 
@@ -1090,11 +1103,11 @@ func (mc *microcontroller) xchg() {
 func (mc *microcontroller) xri() {
 	// XOR immediate with accumulator
 	data := (*mc.memory)[mc.programCounter+1]
-	debugPrint(mc, "ORI", 1)
+	debugPrint(mc, "XRI", 1)
 	mc.ra = mc.ra ^ data
 	mc.carry = false // Because of the specification
 	mc.zero = (mc.ra == 0)
-	mc.sign = (mc.ra & 0x8) > 0
+	mc.sign = (mc.ra & 0x80) > 0
 	mc.parity = GetParity(mc.ra)
 	//mc.auxCarry is not affected per the 8080 programmer's manual
 	// but, some tests rely on it being set to false
@@ -1119,7 +1132,7 @@ func writeOutput() {
 	if !CLIENTMODE {
 		return
 	}
-	if len(outputBuffer) > 43*100 { // 43 characters per line is the standard output (this includes \n)
+	if len(outputBuffer) >= BYTES_PER_LINE*LINES_TO_WRITE { // 43 characters per line is the standard output (this includes \n)
 		//fmt.Printf("Writing %d", len(outputBuffer))
 		n, err := connection.Write([]byte(outputBuffer))
 		if n != len(outputBuffer) {
@@ -1131,6 +1144,20 @@ func writeOutput() {
 		}
 		outputBuffer = ""
 		readyToWriteFlag = false
+	}
+}
+
+func finalWrite() {
+	// Called to just dump whatever is in the buffer at the present
+	// at the end of the ROM execution in order to a comparison
+	// of the remaining data
+	n, err := connection.Write([]byte(outputBuffer))
+	if n != len(outputBuffer) {
+		fmt.Println("Could not write the entire buffer")
+		panic("Buffer not written")
+	}
+	if err != nil {
+		fmt.Printf("Error writing to buffer: %s", err)
 	}
 }
 
@@ -1439,6 +1466,9 @@ func main() {
 			fmt.Printf("OUTPUT: Jump to 0x0 from %04X\n", startAddress)
 			if DEBUGMODE {
 				memoryDump(emulation, 0x400)
+			}
+			if CLIENTMODE {
+				finalWrite()
 			}
 			break
 		} else if emulation.programCounter == 0x5 { // Error function was called

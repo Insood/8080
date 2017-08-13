@@ -44,10 +44,10 @@ func TestSub(t *testing.T) {
 		mc := newMicrocontroller()
 		var result uint8
 		if test.op == subtraction {
-			result = Sub(test.a, test.b, mc)
+			result = Sub(test.a, test.b, mc, 0)
 			t.Logf("%d - %d = %d\n", test.a, test.b, result)
 		} else if test.op == addition {
-			result = Add(test.a, test.b, mc)
+			result = Add(test.a, test.b, mc, 0)
 			t.Logf("%d + %d = %d\n", test.a, test.b, result)
 		}
 		if result != test.result {

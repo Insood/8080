@@ -1,6 +1,6 @@
 require 'eventmachine'
 
-LINES_TO_COMPARE = 1024*100
+LINES_TO_COMPARE = 1024*1024
 
 class Server
 	attr_accessor :connections
@@ -102,7 +102,7 @@ module CompareClient
 			end
 			
 			if (@line_counter % 100000 == 0) then
-				puts "Instructions executed: #{@line_counter}"
+				puts "#{@client_name} Instructions executed: #{@line_counter}"
 			end
 		end
 	end

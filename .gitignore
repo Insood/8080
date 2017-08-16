@@ -8,5 +8,6 @@
 /.vscode
 *.pdf
 *.exe
+*.exe~
 *.rom
 *.txt

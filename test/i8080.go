@@ -20,10 +20,13 @@ var COMPAREFLAG = false
 var CLIENTMODE = false
 
 var connection net.Conn
-var outputBuffer = ""
+
+//var outputBuffer = ""
 var readyToWriteFlag = false
-var LINES_TO_WRITE = 1024 * 100
+var LINES_TO_WRITE = 1024 * 1024
 var BYTES_PER_LINE = 49
+var outputBuffer = make([]byte, LINES_TO_WRITE*BYTES_PER_LINE)
+var outputBufferLines = 0
 
 type microcontroller struct {
 	rb, rc, rd, re, rh, rl, ra uint8 // Seven working registers
@@ -97,7 +100,14 @@ func debugPrint(mc *microcontroller, name string, values uint16) {
 			mc.rb, mc.rc, mc.rd, mc.re, mc.rh, mc.rl, mc.ra, pswByte(mc), mc.stackPointer)
 
 		if CLIENTMODE {
-			outputBuffer += output
+			//outputBuffer += output
+			for i := 0; i < len(output); i++ {
+				//index := BYTES_PER_LINE*outputBufferLines + i
+				//fmt.Printf("Output size: %d || String index: %d || Buffer index: %d || String character: %c", len(output), i, index, output[i])
+				//fmt.Println(output[i])
+				outputBuffer[BYTES_PER_LINE*outputBufferLines+i] = output[i]
+			}
+			outputBufferLines++
 		} else {
 			fmt.Print(output)
 		}
@@ -499,11 +509,7 @@ func (mc *microcontroller) daa() {
 		carry = true
 	}
 
-	if add > 0 {
-		// Have to call Add() just once because each Add()
-		// changes the internal flags
-		mc.ra = Add(mc.ra, add, mc, 0)
-	}
+	mc.ra = Add(mc.ra, add, mc, 0)
 	mc.carry = carry // calculated carry value for this op
 
 	mc.programCounter++
@@ -1132,9 +1138,10 @@ func writeOutput() {
 	if !CLIENTMODE {
 		return
 	}
-	if len(outputBuffer) >= BYTES_PER_LINE*LINES_TO_WRITE { // 43 characters per line is the standard output (this includes \n)
-		//fmt.Printf("Writing %d", len(outputBuffer))
-		n, err := connection.Write([]byte(outputBuffer))
+
+	//if len(outputBuffer) >= BYTES_PER_LINE*LINES_TO_WRITE {
+	if outputBufferLines >= LINES_TO_WRITE {
+		n, err := connection.Write(outputBuffer)
 		if n != len(outputBuffer) {
 			fmt.Println("Could not write the entire buffer")
 			panic("Buffer not written")
@@ -1142,7 +1149,8 @@ func writeOutput() {
 		if err != nil {
 			fmt.Printf("Error writing to buffer: %s", err)
 		}
-		outputBuffer = ""
+		//outputBuffer = ""
+		outputBufferLines = 0
 		readyToWriteFlag = false
 	}
 }
@@ -1151,7 +1159,8 @@ func finalWrite() {
 	// Called to just dump whatever is in the buffer at the present
 	// at the end of the ROM execution in order to a comparison
 	// of the remaining data
-	n, err := connection.Write([]byte(outputBuffer))
+	remaining_buffer := outputBuffer[0 : outputBufferLines*BYTES_PER_LINE]
+	n, err := connection.Write(remaining_buffer)
 	if n != len(outputBuffer) {
 		fmt.Println("Could not write the entire buffer")
 		panic("Buffer not written")
@@ -1407,13 +1416,14 @@ func connect(fileName string) {
 }
 
 func readyToWrite() bool {
-	//fmt.Printf("waiting for a write flag..")
 	if !CLIENTMODE || readyToWriteFlag {
 		return true
 	}
 
 	buffer := make([]byte, 1024)
+	fmt.Printf("Waiting for a write flag\n")
 	n, err := connection.Read(buffer)
+
 	if err != nil {
 		fmt.Printf("Error while reading from server: %s", err)
 		panic("Error while reading from server")

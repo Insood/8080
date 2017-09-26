@@ -1,7 +1,6 @@
 package main
 
 import "testing"
-import "fmt"
 
 // MathTest : A structure which has input & output values for a math test
 type Operation int
@@ -25,11 +24,18 @@ type MathTest struct {
 
 //             operation,   a,   b  result, zero, carry, parity, half, sign
 var subTests = []MathTest{
-	MathTest{subtraction, 0x4A, 0x40, 0x0A, false, true, true, false, false},
-	MathTest{subtraction, 0x1A, 0x0C, 0x0E, false, true, false, false, false},
+	//MathTest{subtraction, 0x01, 0x2, 0xFF,
+	MathTest{subtraction, 0x4A, 0x40, 0x0A, false, false, true, false, false},
+	MathTest{subtraction, 0x1A, 0x0C, 0x0E, false, false, false, false, false},
+	MathTest{addition, 0x2E, 0x6C, 0x9A, false, false, true, true, true},
 	MathTest{addition, 0xAE, 0x74, 0x22, false, true, true, true, false},
 	MathTest{addition, 0x2E, 0x74, 0xA2, false, false, false, true, true},
 	MathTest{addition, 0xA7, 0x59, 0x00, true, true, true, true, false},
+	MathTest{subtraction, 0x11, 0x11, 0x0, true, false, true, true, false},
+	MathTest{subtraction, 0xF5, 0xF5, 0x0, true, false, true, true, false},
+	MathTest{addition, 12, 0xF1, 0xFD, false, false, false, false, true}, // 0xF1 = -15, 0xFD is -3
+	MathTest{subtraction, 12, 15, 0xFD, false, true, false, false, true}, // 0xFD is -3
+	MathTest{subtraction, 197, 98, 99, false, false, true, true, false},
 }
 
 // TestSub : Run a series of subtraction math tests based on the subTests array above
@@ -38,11 +44,11 @@ func TestSub(t *testing.T) {
 		mc := newMicrocontroller()
 		var result uint8
 		if test.op == subtraction {
-			result = Sub(test.a, test.b, mc)
-			fmt.Printf("%d - %d = %d\n", test.a, test.b, result)
+			result = Sub(test.a, test.b, mc, 0)
+			t.Logf("%d - %d = %d\n", test.a, test.b, result)
 		} else if test.op == addition {
-			result = Add(test.a, test.b, mc)
-			fmt.Printf("%d + %d = %d\n", test.a, test.b, result)
+			result = Add(test.a, test.b, mc, 0)
+			t.Logf("%d + %d = %d\n", test.a, test.b, result)
 		}
 		if result != test.result {
 			t.Errorf("Result is incorrect. Expected: %X, Got %X", test.result, result)

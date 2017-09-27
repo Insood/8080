@@ -288,13 +288,11 @@ func runTestROM() {
 }
 
 func runSpaceInvaders() {
-	spaceInvaders := new(game)
+	spaceInvaders := newGame()
 	spaceInvaders.mc = newMicrocontroller()
 	rom := loadSpaceInvaders()
 	spaceInvaders.mc.memory = &rom
-	for {
-		spaceInvaders.run()
-	}
+	spaceInvaders.run()
 }
 
 func main() {

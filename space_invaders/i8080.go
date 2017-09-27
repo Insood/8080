@@ -15,7 +15,7 @@ type microcontroller struct {
 	parity                     bool
 	carry                      bool
 	auxCarry                   bool
-	inte                       bool
+	inte                       bool // Whether or not interrupts are enabled
 
 	// The following are not part of the microcontroller spec, but are here to help
 	// with the emulation

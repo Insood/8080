@@ -3,15 +3,16 @@ package main
 import (
 	"fmt"
 	"image"
+	"math"
 
 	"github.com/hajimehoshi/ebiten"
 )
 
 // SCREENWIDTH - Resolution of the screen (columns)
-var SCREENWIDTH = 256
+var SCREENWIDTH = 224
 
 // SCREENHEIGHT - Resolution of the screen (rows)
-var SCREENHEIGHT = 224
+var SCREENHEIGHT = 256
 
 // SCREENSCALE - How much to scale up the tv screen pixels to current monitor pixels
 var SCREENSCALE = 2
@@ -20,7 +21,7 @@ var SCREENSCALE = 2
 // of the Ebiten render loop. That loop is "guaranteed" to run at 60FPS
 // and the internet tells me that the 4000 instructions per frame is a good target speed
 // to run at. This means that we'll call the middle/end of scanline interrupts twice per frame
-var INSTRUCTIONSPERFRAME = 4000
+var INSTRUCTIONSPERFRAME = 24000
 
 // Game - A struct representing the SpaceInvaders game, the i8080, and a display/sound/input object
 type Game struct {
@@ -92,23 +93,24 @@ func (g *Game) tick() {
 // If the value of 'top' is true, renders the top 112 rows of the screen
 // If false, render the bottom 112
 func (g *Game) render(display *image.RGBA, top bool) error {
+
 	startMemory := 0x2400
 	startPixel := 0
 	if !top {
 		startMemory = 0x3200
-		startPixel = 0xE00
+		startPixel = 0xE00 * 8
 	}
 
 	for offset := 0; offset < 0xE00; offset++ {
-		//fmt.Printf("memory: %X", startMemory+offset)
 		byte := (*g.mc.memory)[startMemory+offset]
-		for shift := 7; shift >= 0; shift-- {
+		for shift := 0; shift < 8; shift++ {
 			targetColor := uint8(0x0)
 			if (byte>>uint32(shift))&0xFF > 0 {
 				targetColor = 0xFF
 			}
 
-			pixel := startPixel + offset*8 + int(7-shift)
+			//pixel := startPixel + offset*8 + int(7-shift)
+			pixel := startPixel + offset*8 + int(shift)
 			//fmt.Printf("Memory: %X, bit: %d, Drawing to pixel: %d value: %d\n", startMemory+offset, 7-shift, pixel, targetColor)
 			display.Pix[4*pixel] = targetColor
 			display.Pix[4*pixel+1] = targetColor
@@ -136,25 +138,42 @@ func (g *Game) scanLine(scanline int) {
 
 func (g *Game) run() {
 	// Starts the main event loop by booting up ebiten
-	displayData := image.NewRGBA(image.Rect(0, 0, SCREENWIDTH, SCREENHEIGHT))
+	// displayData is given with width/height swapped since
+	// the image will be rotated before being pasted
+	//displayData := image.NewRGBA(image.Rect(0, 0, SCREENHEIGHT, SCREENWIDTH))
+	displayData, err := ebiten.NewImage(SCREENHEIGHT, SCREENWIDTH, ebiten.FilterNearest)
+
+	fmt.Println("run() start")
+
+	if err != nil {
+		fmt.Println("Error creating a displayData canvas")
+	}
 
 	f := func(screen *ebiten.Image) error {
+		tmpImage := image.NewRGBA(image.Rect(0, 0, SCREENHEIGHT, SCREENWIDTH))
 		fmt.Println("Starting to draw frame")
 		for i := 0; i < INSTRUCTIONSPERFRAME/2; i++ {
 			g.tick()
 		}
 		fmt.Println("Top render")
-		g.render(displayData, true)
+		g.render(tmpImage, true)
 		fmt.Println("Scanline interrupt 96")
 		g.scanLine(96)
 		fmt.Println("Bottom render")
-		g.render(displayData, false)
+		g.render(tmpImage, false)
 		fmt.Println("Scanline interrupt 224")
 		g.scanLine(224)
 		fmt.Println("Flipping buffers")
-		screen.ReplacePixels(displayData.Pix)
+		displayData.ReplacePixels(tmpImage.Pix)
+		opts := &ebiten.DrawImageOptions{}
+		opts.GeoM.Rotate(-math.Pi / 2)
+		opts.GeoM.Translate(0, float64(SCREENHEIGHT))
+		screen.DrawImage(displayData, opts)
 		return nil
 	}
 
-	ebiten.Run(f, SCREENWIDTH, SCREENHEIGHT, 1, "Space Invaders")
+	fmt.Println("Starting ebiten.run()")
+
+	runErr := ebiten.Run(f, SCREENWIDTH, SCREENHEIGHT, 3, "Space Invaders")
+	fmt.Println("Exited run() with error: ", runErr)
 }

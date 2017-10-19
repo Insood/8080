@@ -1,5 +1,5 @@
 # 8080
-Intel 8080 Emulator for the Taito Space Invaders game 
+Intel 8080 Emulator for the Taito Space Invaders game implemented in golang
 
 There is source code for two executables here:
 
@@ -13,10 +13,11 @@ Dependencies:
 	invaders_g.rom
 	invaders_f.rom
 	invaders_e.rom
-	
+2) Ebiten 2D library (https://github.com/hajimehoshi/ebiten)
 
 Built in GO with lots of help from the following resources:
 1) http://www.computerarcheology.com/Arcade/SpaceInvaders/Code.html
 2) http://www.emulator101.com/reference/8080-by-opcode.html
 3) http://www.pastraiser.com/cpu/i8080/i8080_opcodes.html
 4) https://github.com/begoon/i8080-core/
+5) http://typedarray.org/wp-content/projects/Intel8080/index.html (Javascript version)

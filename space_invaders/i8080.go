@@ -554,7 +554,7 @@ func (mc *microcontroller) inr() {
 }
 
 func (mc *microcontroller) halt() {
-	print("halt() is not yet implemented")
+	fmt.Printf("halt() is not yet implemented. Caled from %x\n", mc.programCounter)
 	panic("Not yet implemented")
 }
 

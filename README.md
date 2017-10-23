@@ -7,13 +7,25 @@ There is source code for two executables here:
 
 2) space_invaders - A superset of 'test,' but with additional functionality to emulate the Taito Space Invaders game as faithfully as possible. 
 
+Controls for space invaders:
+START       - Insert Credit
+Key 1       - Start a 1 player game (1 credit required)
+Key 2       - Start a 2 player game (2 credits required)
+Left Arrow  - Move ship left (P1)
+Right Arrow - Move ship right (P1)
+Space       - Fire (P1)
+Key A       - Move ship left (P2)
+Key D       - Move ship right (P2)
+Key W       - Fire (P2)
+Key T       - Tilt
+Key 3       - Toggle DIP Switch 3 (set number of lives; 00=3, 10 = 5)
+Key 4       - Toggle DIP Switch 4 (some sort of power on self test)
+Key 5       - Toggle DIP Switch 5 (set number of lives; 01 = 4, 11 = 6)
+Key 6       - Toggle DIP Switch 6 (0 = extra ship at 1500, 1 = extra ship at 1000)
+Key 7       - Toggle DIP Switch 7 (0 = display coin info on demo screen, 1=don't?)
+
 Dependencies:
-1) Space Invaders ROM has to be located in the same directory as the executable. The files must be named as follows:
-	invaders_h.rom
-	invaders_g.rom
-	invaders_f.rom
-	invaders_e.rom
-2) Ebiten 2D library (https://github.com/hajimehoshi/ebiten)
+1) Ebiten 2D library (https://github.com/hajimehoshi/ebiten)
 
 Built in GO with lots of help from the following resources:
 1) http://www.computerarcheology.com/Arcade/SpaceInvaders/Code.html
@@ -21,3 +33,8 @@ Built in GO with lots of help from the following resources:
 3) http://www.pastraiser.com/cpu/i8080/i8080_opcodes.html
 4) https://github.com/begoon/i8080-core/
 5) http://typedarray.org/wp-content/projects/Intel8080/index.html (Javascript version)
+6) #ebiten on gopher.slack.com
+
+To do:
+1) Make working sound
+2) GopherJS-ify the game so that it can be played online

@@ -43,6 +43,13 @@ func debugPrintHeader(mc *microcontroller) {
 	}
 }
 
+// Outputs to stdout if DEBUGMODE is set
+func debugPrintLn(str string) {
+	if DEBUGMODE {
+		fmt.Println(str)
+	}
+}
+
 func debugPrint(mc *microcontroller, name string, values uint16) {
 	if DEBUGMODE || CLIENTMODE {
 		if !COMPAREFLAG && !CLIENTMODE { // Do not print headers in compare output mode or in client mode
@@ -297,7 +304,7 @@ func runSpaceInvaders() {
 
 func main() {
 	// Parse command line flags
-	verboseFlag := flag.Bool("v", true, "Show every instruction being executed (slow)")
+	verboseFlag := flag.Bool("v", false, "Show every instruction being executed (slow)")
 	compareFlag := flag.Bool("c", false, "Instructions are output in the format of the i8080-core emulator")
 	serverFlag := flag.Bool("s", false, "Connect to a local server and write debug data to it")
 	testFlag := flag.Bool("t", false, "Start program in i8080-core test rom mode")

@@ -51,5 +51,8 @@ Built in GO with lots of help from the following resources:
 6) #ebiten on gopher.slack.com
 
 To do:
-1) Make working sound
-2) GopherJS-ify the game so that it can be played online
+1) GopherJS-ify the game so that it can be played online
+
+Known Issues:
+1) UFO sound does not play correctly (wontfix)
+2) Some of the sounds are not implemented - extra ship, cocktail mode (wontfix)

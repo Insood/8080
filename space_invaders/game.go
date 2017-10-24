@@ -7,6 +7,8 @@ import (
 	"math"
 	"os"
 
+	"github.com/hajimehoshi/ebiten/audio/wav"
+
 	"github.com/hajimehoshi/ebiten/audio"
 
 	"github.com/hajimehoshi/ebiten"
@@ -44,14 +46,23 @@ type Game struct {
 	// stuff for playing sounds
 	audioContext *audio.Context
 	soundBoard   map[string]*audio.Player
+
+	soundBitMap1 map[uint8]string
+	soundBitMap2 map[uint8]string
 }
 
-func loadSound(context *audio.Context, fileName string) *audio.Player {
+func loadWavSound(context *audio.Context, fileName string) *audio.Player {
 	file, err := os.Open(fileName)
 	if err != nil {
 		panic(fmt.Sprintf("Error while opening '%s'. The error is: %s", fileName, err))
 	}
-	player, err := audio.NewPlayer(context, file)
+
+	decodedFile, err := wav.Decode(context, file)
+	if err != nil {
+		panic(fmt.Sprintf("Error while decoding %s. The error is: %s", fileName, err))
+	}
+
+	player, err := audio.NewPlayer(context, decodedFile)
 	if err != nil {
 		panic(fmt.Sprintf("Error while creating a Player for '%s'. The error is: %s", fileName, err))
 	}
@@ -74,17 +85,29 @@ func newGame() *Game {
 		panic(str)
 	}
 	game.soundBoard = make(map[string]*audio.Player)
-	game.soundBoard["explosion"] = loadSound(context, "sounds/explosion.wav")
-	game.soundBoard["fastinvader1"] = loadSound(context, "sounds/fastinvader1.wav")
-	game.soundBoard["fastinvader2"] = loadSound(context, "sounds/fastinvader2.wav")
-	game.soundBoard["fastinvader3"] = loadSound(context, "sounds/fastinvader3.wav")
-	game.soundBoard["fastinvader4"] = loadSound(context, "sounds/fastinvader4.wav")
+	game.soundBoard["explosion"] = loadWavSound(context, "sounds/explosion.wav")
+	game.soundBoard["fastinvader1"] = loadWavSound(context, "sounds/fastinvader1.wav")
+	game.soundBoard["fastinvader2"] = loadWavSound(context, "sounds/fastinvader2.wav")
+	game.soundBoard["fastinvader3"] = loadWavSound(context, "sounds/fastinvader3.wav")
+	game.soundBoard["fastinvader4"] = loadWavSound(context, "sounds/fastinvader4.wav")
+	game.soundBoard["invaderkilled"] = loadWavSound(context, "sounds/invaderkilled.wav")
+	game.soundBoard["shoot"] = loadWavSound(context, "sounds/shoot.wav")
+	//game.soundBoard["ufo_highpitch"] = loadWavSound(context, "sounds/ufo_highpitch.wav")
+	game.soundBoard["ufo_lowpitch"] = loadWavSound(context, "sounds/ufo_lowpitch.wav")
 
-	game.soundBoard["invaderkilled"] = loadSound(context, "sounds/invaderkilled.wav")
-	game.soundBoard["shoot"] = loadSound(context, "sounds/shoot.wav")
-
-	game.soundBoard["ufo_highpitch"] = loadSound(context, "sounds/ufo_highpitch.wav")
-	game.soundBoard["ufo_lowpitch"] = loadSound(context, "sounds/ufo_lowpitch.wav")
+	game.soundBitMap1 = make(map[uint8]string)
+	//game.soundBitMap1[0] = "ufo_lowpitch"
+	game.soundBitMap1[1] = "shoot"
+	game.soundBitMap1[2] = "explosion"
+	game.soundBitMap1[3] = "invaderkilled"
+	//game.soundBitMap1[4] = ? this is called 'Extended Play'
+	//game.soundBitMap1[5] = ? this is called AMP enable
+	game.soundBitMap2 = make(map[uint8]string)
+	game.soundBitMap2[0] = "fastinvader1"
+	game.soundBitMap2[1] = "fastinvader2"
+	game.soundBitMap2[2] = "fastinvader3"
+	game.soundBitMap2[3] = "fastinvader4"
+	game.soundBitMap2[4] = "ufo_lowpitch"
 
 	return game
 }
@@ -182,22 +205,30 @@ func (g *Game) in() {
 }
 
 func (g *Game) playSounds(bank uint8) {
-	return // Todo: Fix this later
 	soundBits := g.mc.ra
 	if bank == 1 {
-		if soundBits&0x1 > 0 { // bit 0
-			g.soundBoard["ufo_lowpitch"].Rewind()
-			g.soundBoard["ufo_lowpitch"].Play()
-		}
-		if (soundBits>>1)&0x1 > 0 { // bit 1 is set
-			if !g.soundBoard["shoot"].IsPlaying() {
-				g.soundBoard["shoot"].Rewind()
-				g.soundBoard["shoot"].Play()
+		for bit, soundName := range g.soundBitMap1 {
+			if (soundBits>>bit)&0x1 > 0 {
+				if !g.soundBoard[soundName].IsPlaying() {
+					g.soundBoard[soundName].Rewind()
+					g.soundBoard[soundName].Play()
+				}
+			} else {
+				g.soundBoard[soundName].Pause()
 			}
 		}
 	}
 	if bank == 2 {
-
+		for bit, soundName := range g.soundBitMap2 {
+			if (soundBits>>bit)&0x1 > 0 {
+				if !g.soundBoard[soundName].IsPlaying() {
+					g.soundBoard[soundName].Rewind()
+					g.soundBoard[soundName].Play()
+				}
+			} else {
+				g.soundBoard[soundName].Pause()
+			}
+		}
 	}
 }
 
@@ -322,10 +353,10 @@ func checkKeyboard(g *Game) error {
 		g.dip5 = !g.dip5
 	}
 	if keyUp(g, ebiten.Key6) {
-		g.dip5 = !g.dip6
+		g.dip6 = !g.dip6
 	}
 	if keyUp(g, ebiten.Key7) {
-		g.dip5 = !g.dip7
+		g.dip7 = !g.dip7
 	}
 	return nil
 }

@@ -6,6 +6,8 @@ import (
 	"io"
 	"net"
 	"os"
+
+	"github.com/hajimehoshi/ebiten/ebitenutil"
 )
 
 // DEBUGMODE - Whether or not the program is running in debug mode (ie: pretty print opcodes)
@@ -91,7 +93,7 @@ func debugPrint(mc *microcontroller, name string, values uint16) {
 }
 
 func loadTestROM(romName string) []uint8 {
-	fi, err := os.Open(romName)
+	fi, err := ebitenutil.OpenFile(romName)
 	if err != nil {
 		fmt.Println(romName, "is an invalid file. Could not open.")
 		panic(err)
@@ -119,7 +121,7 @@ func loadSpaceInvaders() []uint8 {
 	files := []string{"invaders_h.rom", "invaders_g.rom", "invaders_f.rom", "invaders_e.rom"}
 	memory := make([]uint8, 0, 65536)
 	for _, file := range files {
-		fi, err := os.Open(file)
+		fi, err := ebitenutil.OpenFile(file)
 		if err != nil {
 			panic(err)
 		}

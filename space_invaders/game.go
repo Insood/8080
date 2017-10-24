@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"image"
 	"math"
-	"os"
 
 	"github.com/hajimehoshi/ebiten/audio/wav"
+	"github.com/hajimehoshi/ebiten/ebitenutil"
 
 	"github.com/hajimehoshi/ebiten/audio"
 
@@ -52,7 +52,7 @@ type Game struct {
 }
 
 func loadWavSound(context *audio.Context, fileName string) *audio.Player {
-	file, err := os.Open(fileName)
+	file, err := ebitenutil.OpenFile(fileName)
 	if err != nil {
 		panic(fmt.Sprintf("Error while opening '%s'. The error is: %s", fileName, err))
 	}

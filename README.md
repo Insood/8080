@@ -1,5 +1,7 @@
-# 8080
+# i8080 Emulator
 Intel 8080 Emulator for the Taito Space Invaders game implemented in golang
+
+A version of this emulator transpiled to Javascript using GopherJS is available [here](https://insood.github.io/8080/). It runs pretty slow due to the many layers of abstraction, but is still playable. (Works best in Google Chrome - runs very slow in Firefox)
 
 There is source code for two executables here:
 
@@ -9,35 +11,21 @@ There is source code for two executables here:
 
 Controls for space invaders:
 
-START       - Insert Credit
-
-Key 1       - Start a 1 player game (1 credit required)
-
-Key 2       - Start a 2 player game (2 credits required)
-
-Left Arrow  - Move ship left (P1)
-
-Right Arrow - Move ship right (P1)
-
-Space       - Fire (P1)
-
-Key A       - Move ship left (P2)
-
-Key D       - Move ship right (P2)
-
-Key W       - Fire (P2)
-
-Key T       - Tilt
-
-Key 3       - Toggle DIP Switch 3 (set number of lives; 00=3, 10 = 5)
-
-Key 4       - Toggle DIP Switch 4 (some sort of power on self test)
-
-Key 5       - Toggle DIP Switch 5 (set number of lives; 01 = 4, 11 = 6)
-
-Key 6       - Toggle DIP Switch 6 (0 = extra ship at 1500, 1 = extra ship at 1000)
-
-Key 7       - Toggle DIP Switch 7 (0 = display coin info on demo screen, 1=don't?)
+* Enter - Insert Credit
+* Key 1 - Start a 1 player game (1 credit required)
+* Key 2 - Start a 2 player game (2 credits required)
+* Left Arrow - Move ship left (P1)
+* Right Arrow - Move ship right (P1)
+* Space - Fire (P1)
+* Key A - Move ship left (P2)
+* Key D - Move ship right (P2)
+* Key W - Fire (P2)
+* Key T - Tilt
+* Key 3 - Toggle DIP Switch 3 (set number of lives; 00=3, 10 = 5)
+* Key 4 - Toggle DIP Switch 4 (some sort of power on self test)
+* Key 5 - Toggle DIP Switch 5 (set number of lives; 01 = 4, 11 = 6)
+* Key 6 - Toggle DIP Switch 6 (0 = extra ship at 1500, 1 = extra ship at 1000)
+* Key 7 - Toggle DIP Switch 7 (0 = display coin info on demo screen, 1=don't?)
 
 Dependencies:
 1) Ebiten 2D library (https://github.com/hajimehoshi/ebiten)
@@ -50,9 +38,8 @@ Built in GO with lots of help from the following resources:
 5) http://typedarray.org/wp-content/projects/Intel8080/index.html (Javascript version)
 6) #ebiten on gopher.slack.com
 
-To do:
-1) GopherJS-ify the game so that it can be played online
-
 Known Issues:
 1) UFO sound does not play correctly (wontfix)
 2) Some of the sounds are not implemented - extra ship, cocktail mode (wontfix)
+3) GopherJS version runs very slow (wontfix)
+4) Source code is not very pretty (wontfix)
